@@ -1,50 +1,64 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchNotifications } from "../utils/api";
-import { Log } from "../utils/logger";
+import { fetchNotifications, type Notification } from "../utils/api";
 
 import {
   Container,
   Typography,
   Card,
-  CardContent
+  CardContent,
+  Alert,
+  CircularProgress
 } from "@mui/material";
 
 export default function Home() {
 
   const [notifications, setNotifications] =
-    useState<any[]>([]);
+    useState<Notification[]>([]);
+
+  const [error, setError] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(true);
 
   const [readIds, setReadIds] =
-    useState<string[]>([]);
+    useState<string[]>(() => {
+      if (typeof window === "undefined") {
+        return [];
+      }
 
-  useEffect(() => {
+      try {
+        const stored = JSON.parse(
+          window.localStorage.getItem("readNotifications") || "[]"
+        );
 
-    const stored =
-      JSON.parse(
-        localStorage.getItem("readNotifications") || "[]"
-      );
+        return Array.isArray(stored) ? stored : [];
+      } catch {
+        window.localStorage.removeItem("readNotifications");
+        return [];
+      }
+    });
 
-    setReadIds(stored);
-
-  }, []);
-
+  // fetch notifications from API
   useEffect(() => {
 
     async function load() {
 
-      await Log(
-        "frontend",
-        "info",
-        "page",
-        "Loading all notifications"
-      );
-
-      const data =
-        await fetchNotifications();
-
-      setNotifications(data);
+      try {
+        const data = await fetchNotifications();
+        setNotifications(data);
+        setError("");
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load notifications"
+        );
+      } finally {
+        setLoading(false);
+      }
 
     }
 
@@ -52,13 +66,18 @@ export default function Home() {
 
   }, []);
 
+  // mark notification as read
   function markAsRead(id: string) {
+
+    if (readIds.includes(id)) {
+      return;
+    }
 
     const updated = [...readIds, id];
 
     setReadIds(updated);
 
-    localStorage.setItem(
+    window.localStorage.setItem(
       "readNotifications",
       JSON.stringify(updated)
     );
@@ -71,6 +90,22 @@ export default function Home() {
       <Typography variant="h4" sx={{ mt: 2 }}>
         All Notifications
       </Typography>
+
+      {loading && (
+        <CircularProgress sx={{ mt: 3 }} />
+      )}
+
+      {error && (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      {!loading && !error && notifications.length === 0 && (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          No notifications found.
+        </Alert>
+      )}
 
       {notifications.map((n) => {
 
@@ -97,11 +132,11 @@ export default function Home() {
             <CardContent>
 
               <Typography
-                fontWeight={
-                  isRead
+                sx={{
+                  fontWeight: isRead
                     ? "normal"
                     : "bold"
-                }
+                }}
               >
                 {n.message}
               </Typography>

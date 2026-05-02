@@ -1,12 +1,13 @@
 "use client";
 
 import {
-  useEffect,
-  useState
+  useState,
+  useEffect
 } from "react";
 
 import {
-  fetchNotifications
+  fetchNotifications,
+  type Notification
 } from "../../utils/api";
 
 import {
@@ -14,8 +15,34 @@ import {
   Typography,
   Select,
   MenuItem,
-  TextField
+  TextField,
+  Card,
+  CardContent,
+  Alert,
+  CircularProgress
 } from "@mui/material";
+
+const PRIORITY: Record<string, number> = {
+  Placement: 3,
+  Result: 2,
+  Event: 1
+};
+
+function sortByPriority(notifications: Notification[]) {
+  return [...notifications].sort((a, b) => {
+    const priorityDifference =
+      (PRIORITY[b.type] ?? 0) - (PRIORITY[a.type] ?? 0);
+
+    if (priorityDifference !== 0) {
+      return priorityDifference;
+    }
+
+    return (
+      new Date(b.timestamp ?? 0).getTime() -
+      new Date(a.timestamp ?? 0).getTime()
+    );
+  });
+}
 
 export default function PriorityInbox() {
 
@@ -26,20 +53,41 @@ export default function PriorityInbox() {
     useState("");
 
   const [notifications, setNotifications] =
-    useState<any[]>([]);
+    useState<Notification[]>([]);
+
+  const [error, setError] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(true);
 
   useEffect(() => {
 
     async function load() {
 
-      const data =
-        await fetchNotifications(
-          1,
-          limit,
-          type
-        );
+      setLoading(true);
 
-      setNotifications(data);
+      try {
+        const data =
+          await fetchNotifications(
+            1,
+            100,
+            type
+          );
+
+        setNotifications(
+          sortByPriority(data).slice(0, limit)
+        );
+        setError("");
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load priority notifications"
+        );
+      } finally {
+        setLoading(false);
+      }
 
     }
 
@@ -90,11 +138,39 @@ export default function PriorityInbox() {
 
       </Select>
 
+      {loading && (
+        <CircularProgress sx={{ mt: 3, display: "block" }} />
+      )}
+
+      {error && (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      {!loading && !error && notifications.length === 0 && (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          No priority notifications found.
+        </Alert>
+      )}
+
       {notifications.map((n) => (
 
-        <div key={n.id}>
-          {n.message}
-        </div>
+        <Card key={n.id} sx={{ my: 2 }}>
+
+          <CardContent>
+
+            <Typography sx={{ fontWeight: "bold" }}>
+              {n.message}
+            </Typography>
+
+            <Typography color="gray">
+              {n.type}
+            </Typography>
+
+          </CardContent>
+
+        </Card>
 
       ))}
 
